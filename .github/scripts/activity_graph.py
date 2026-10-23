@@ -16,7 +16,7 @@ import urllib.request
 QUERY = """query($login: String!, $org: ID) { user(login: $login) {
   contributionsCollection(organizationID: $org) { contributionCalendar {
   weeks { contributionDays { date contributionCount } } } } } }"""
-CELL, GAP, LEFT, TOP = 10, 3, 28, 20
+CELL, GAP = 10, 3
 LIGHT = ["#ebedf0", "#9be9a8", "#40c463", "#30a14e", "#216e39"]
 DARK = ["#161b22", "#0e4429", "#006d32", "#26a641", "#39d353"]
 
@@ -43,39 +43,27 @@ def level(count: int, top: int) -> int:
     return min(4, 1 + (4 * (count - 1)) // top)
 
 
-def svg(days: dict[str, int], logins: list[str], org: str | None) -> str:
+def svg(days: dict[str, int]) -> str:
+    """The grid only: no labels, no caption."""
     dates = sorted(days)
     first = dt.date.fromisoformat(dates[0])
     first -= dt.timedelta(days=(first.weekday() + 1) % 7)  # weeks start on Sunday, as on GitHub
     top = max(days.values())
-    cells, months, last_month = [], [], None
+    cells = []
     for iso in dates:
         day = dt.date.fromisoformat(iso)
         week, weekday = (day - first).days // 7, (day.weekday() + 1) % 7
-        x, y = LEFT + week * (CELL + GAP), TOP + weekday * (CELL + GAP)
         cells.append(
-            f'<rect class="l{level(days[iso], top)}" x="{x}" y="{y}" width="{CELL}" height="{CELL}" rx="2">'
-            f"<title>{iso}: {days[iso]}</title></rect>"
+            f'<rect class="l{level(days[iso], top)}" x="{week * (CELL + GAP)}" y="{weekday * (CELL + GAP)}" '
+            f'width="{CELL}" height="{CELL}" rx="2"><title>{iso}: {days[iso]}</title></rect>'
         )
-        if weekday == 0 and day.month != last_month:
-            months.append(f'<text x="{x}" y="{TOP - 7}">{day.strftime("%b")}</text>')
-            last_month = day.month
-    width = LEFT + ((dt.date.fromisoformat(dates[-1]) - first).days // 7 + 1) * (CELL + GAP)
-    height = TOP + 7 * (CELL + GAP) + 22
-    total = sum(days.values())
-    where = f" to {org} repos" if org else ""
-    caption = f"{total} contributions{where} in the last year ({' + '.join(logins)})"
-    styles = "".join(f".l{i}{{fill:{c}}}" for i, c in enumerate(LIGHT))
+    width = ((dt.date.fromisoformat(dates[-1]) - first).days // 7 + 1) * (CELL + GAP) - GAP
+    height = 7 * (CELL + GAP) - GAP
+    light = "".join(f".l{i}{{fill:{c}}}" for i, c in enumerate(LIGHT))
     dark = "".join(f".l{i}{{fill:{c}}}" for i, c in enumerate(DARK))
-    labels = "".join(
-        f'<text x="0" y="{TOP + d * (CELL + GAP) + 9}">{name}</text>' for d, name in ((1, "Mon"), (3, "Wed"), (5, "Fri"))
-    )
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
-        f"<style>text{{font:10px -apple-system,Segoe UI,Helvetica,Arial,sans-serif;fill:#57606a}}{styles}"
-        f"@media (prefers-color-scheme: dark){{text{{fill:#8b949e}}{dark}}}</style>"
-        f"{''.join(months)}{labels}{''.join(cells)}"
-        f'<text x="{LEFT}" y="{height - 6}">{caption}</text></svg>\n'
+        f"<style>{light}@media (prefers-color-scheme: dark){{{dark}}}</style>{''.join(cells)}</svg>\n"
     )
 
 
@@ -94,7 +82,7 @@ def main() -> None:
         for iso, count in calendar(login, token, org_id).items():
             days[iso] = days.get(iso, 0) + count
     with open(out, "w") as f:
-        f.write(svg(days, args, org))
+        f.write(svg(days))
 
 
 if __name__ == "__main__":
